@@ -20,7 +20,7 @@ pipeline {
     stage('Build Docker Image') {
       steps {
         script {
-          echo "🛠️ Building image ${IMAGE}:${TAG}..."
+          echo "🛠️ Building Docker image..."
           docker.build("${IMAGE}:${TAG}")
         }
       }
@@ -44,23 +44,32 @@ pipeline {
       }
     }
 
-    stage('Deploy to Kubernetes (Helm)') {
+    stage('Deploy to Kubernetes with Helm') {
       agent {
         docker {
-          image 'lachlanevenson/k8s-helm:latest'
-          args '-u root' // gunakan root user agar bisa akses file KUBECONFIG jika perlu
+          image 'alpine/helm:3.12.0'
+          args '-u 0:0' // Agar bisa akses volume dan file kubeconfig
         }
       }
       steps {
         withCredentials([file(credentialsId: "${KUBECONFIG_CRED}", variable: 'KUBE_FILE')]) {
           script {
-            echo "🚀 Deploying to Kubernetes via Helm..."
+            echo "🚀 Deploying with Helm..."
             sh """
-              export KUBECONFIG=$KUBE_FILE
-              helm upgrade --install $HELM_RELEASE ./helm \
-                --set image.repository=$IMAGE \
-                --set image.tag=$TAG \
-                --namespace $NAMESPACE --create-namespace
+              echo '📁 Listing kubeconfig file...'
+              ls -la "${KUBE_FILE}"
+
+              export KUBECONFIG="${KUBE_FILE}"
+
+              echo '📦 Helm version:'
+              helm version
+
+              echo '🚀 Running Helm upgrade/install...'
+              helm upgrade --install "${HELM_RELEASE}" ./helm \
+                --set image.repository="${IMAGE}" \
+                --set image.tag="${TAG}" \
+                --namespace "${NAMESPACE}" \
+                --create-namespace
             """
           }
         }
@@ -70,10 +79,10 @@ pipeline {
 
   post {
     success {
-      echo "✅ Pipeline Sukses: Aplikasi berhasil dideploy ke Kubernetes"
+      echo "✅ Pipeline berhasil! Aplikasi dideploy ke Kubernetes."
     }
     failure {
-      echo "❌ Pipeline Gagal: Cek log untuk mengetahui error"
+      echo "❌ Pipeline gagal! Silakan cek log error di atas."
     }
   }
 }
