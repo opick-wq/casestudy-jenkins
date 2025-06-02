@@ -1,5 +1,9 @@
 pipeline {
-  agent any
+  agent {
+    docker {
+      image 'alpine/helm:3.12.0'
+    }
+  }
 
   environment {
     IMAGE = "sultan877/demo-app"
