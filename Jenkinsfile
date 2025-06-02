@@ -1,9 +1,5 @@
 pipeline {
-  agent {
-    docker {
-      image 'alpine/helm:3.12.0'
-    }
-  }
+  agent any
 
   environment {
     IMAGE = "sultan877/demo-app"
@@ -25,7 +21,7 @@ pipeline {
       steps {
         script {
           echo "🛠️ Building image ${IMAGE}:${TAG}..."
-          def builtImage = docker.build("${IMAGE}:${TAG}")
+          docker.build("${IMAGE}:${TAG}")
         }
       }
     }
@@ -33,7 +29,7 @@ pipeline {
     stage('Push Docker Image') {
       steps {
         withCredentials([usernamePassword(
-          credentialsId: "docker-hub",
+          credentialsId: "${DOCKER_CRED}",
           usernameVariable: 'USER',
           passwordVariable: 'PASS'
         )]) {
@@ -49,17 +45,23 @@ pipeline {
     }
 
     stage('Deploy to Kubernetes (Helm)') {
+      agent {
+        docker {
+          image 'lachlanevenson/k8s-helm:latest'
+          args '-u root' // gunakan root user agar bisa akses file KUBECONFIG jika perlu
+        }
+      }
       steps {
         withCredentials([file(credentialsId: "${KUBECONFIG_CRED}", variable: 'KUBE_FILE')]) {
           script {
             echo "🚀 Deploying to Kubernetes via Helm..."
-            sh '''
+            sh """
               export KUBECONFIG=$KUBE_FILE
               helm upgrade --install $HELM_RELEASE ./helm \
                 --set image.repository=$IMAGE \
                 --set image.tag=$TAG \
                 --namespace $NAMESPACE --create-namespace
-            '''
+            """
           }
         }
       }
